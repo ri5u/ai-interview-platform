@@ -1,6 +1,8 @@
 import Editor from '@monaco-editor/react';
 import { useState, useRef, useEffect } from 'react';
 import { ws } from './socket';
+import TrackSelector from './components/TrackSelector';
+import LanguageSelector from './components/LanguageSelector';
 
 function arrayBufferToBase64(buffer) {
   let binary = '';
@@ -21,6 +23,8 @@ export default function App() {
   const nextStartTimeRef = useRef(0);
   const scheduledSourcesRef = useRef([]);
 
+  const [selectedTrack, setSelectedTrack] = useState("dsa");
+  const [selectedLanguage, setSelectedLanguage] = useState("python");
   function playAudio(arrayBuffer) {
     const ctx = audioContextRef.current;
     if (!ctx) return;
@@ -142,6 +146,7 @@ export default function App() {
     }
   }
 
+
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "8px 16px", background: "#222", color: "#fff", display: "flex", alignItems: "center", gap: "12px" }}>
@@ -152,13 +157,25 @@ export default function App() {
         ) : (
           <span style={{ color: "#4ec9b0" }}>● Interview Live</span>
         )}
+
+        <TrackSelector
+          selectedTrack={selectedTrack}
+          onSelectTrack={setSelectedTrack}
+          disabled={isInterviewActive}
+        />
+
+        <LanguageSelector 
+          currentLanguage={selectedLanguage}
+          onLanguageChange={setSelectedLanguage}
+          disabled={isInterviewActive}
+        />
+
       </div>
       <div style={{ flex: 1 }}>
         <Editor
           height="100%"
           theme="vs-dark"
-          defaultLanguage="javascript"
-          defaultValue={someDefaultValue}
+          language={selectedLanguage} 
           onChange={handleTyping}
         />
       </div>
