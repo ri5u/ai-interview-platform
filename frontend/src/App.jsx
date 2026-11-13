@@ -25,7 +25,7 @@ export default function App() {
 
   const [user, setUser] = useState(null);
   const [selectedTrack, setSelectedTrack] = useState("dsa");
-  const [selectedLanguage, setSelectedLanguage] = useState("python");
+  const [selectedLanguage, setSelectedLanguage] = useState("cpp");
   const [isInterviewActive, setIsInterviewActive] = useState(false);
 
   function playAudio(arrayBuffer) {
@@ -156,11 +156,18 @@ export default function App() {
     }
   }
 
-  function handleLogout() {
+  function handleStopInteview(){
     // Clean up any active audio stream if they log out mid-session
-    if (streamRef.current) {
+    stopAudioPlayback();
+    if(streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+    }
+
+    if(ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'stop'
+      }))
     }
 
     //clear the timeout for the debounced text from the editor
@@ -168,6 +175,10 @@ export default function App() {
     timerRef.current = null;
 
     setIsInterviewActive(false);
+  }
+
+  function handleLogout() {
+    handleStopInteview();
     setUser(null); // Re-triggers {!user && <AuthDialog ... />}
   }
 
@@ -181,7 +192,12 @@ export default function App() {
             Start Interview
           </button>
         ) : (
-          <span style={{ color: "#4ec9b0" }}>● Interview Live</span>
+          <>
+            <button onClick={handleStopInteview} style={{ padding: "6px 12px", cursor: "pointer" }}>
+              Stop Interview
+            </button>
+            <span style={{ color: "#4ec9b0" }}>● Interview Live</span>
+          </>
         )}
 
         <TrackSelector
