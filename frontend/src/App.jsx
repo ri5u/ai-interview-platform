@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { ws } from './socket';
 import TrackSelector from './components/TrackSelector';
 import LanguageSelector from './components/LanguageSelector';
+import AuthDialog from './components/AuthDialog';
 
 function arrayBufferToBase64(buffer) {
   let binary = '';
@@ -17,14 +18,16 @@ export default function App() {
   const someDefaultValue = "// HELLOOO WORLD";
   const timerRef = useRef(null);
 
-  const [isInterviewActive, setIsInterviewActive] = useState(false);
   const audioContextRef = useRef(null);
   const streamRef = useRef(null);
   const nextStartTimeRef = useRef(0);
   const scheduledSourcesRef = useRef([]);
 
+  const [user, setUser] = useState(null);
   const [selectedTrack, setSelectedTrack] = useState("dsa");
   const [selectedLanguage, setSelectedLanguage] = useState("python");
+  const [isInterviewActive, setIsInterviewActive] = useState(false);
+
   function playAudio(arrayBuffer) {
     const ctx = audioContextRef.current;
     if (!ctx) return;
@@ -93,6 +96,7 @@ export default function App() {
   }, []);
 
   function handleTyping(value) {
+    if(!isInterviewActive) return;
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       if (ws && ws.readyState === WebSocket.OPEN) {
@@ -106,6 +110,12 @@ export default function App() {
 
   async function handleStartInterview() {
     try {
+      if(ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type:'init', 
+          mode: selectedTrack
+        }));
+      }
       const ctx = new window.AudioContext({ sampleRate: 16000 });
       audioContextRef.current = ctx;
 
@@ -146,9 +156,25 @@ export default function App() {
     }
   }
 
+  function handleLogout() {
+    // Clean up any active audio stream if they log out mid-session
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    //clear the timeout for the debounced text from the editor
+    clearTimeout(timerRef.current);
+    timerRef.current = null;
+
+    setIsInterviewActive(false);
+    setUser(null); // Re-triggers {!user && <AuthDialog ... />}
+  }
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+      {/* user dialog show up till up until user has logged in */}
+      {!user && <AuthDialog onAuthSuccess={(userData) => setUser(userData)} />}
       <div style={{ padding: "8px 16px", background: "#222", color: "#fff", display: "flex", alignItems: "center", gap: "12px" }}>
         {!isInterviewActive ? (
           <button onClick={handleStartInterview} style={{ padding: "6px 12px", cursor: "pointer" }}>
@@ -169,7 +195,18 @@ export default function App() {
           onLanguageChange={setSelectedLanguage}
           disabled={isInterviewActive}
         />
-
+        <div>
+          {user ? (
+            <>
+              <span>Candidate: {user.username} </span>
+              <button type="button" onClick={handleLogout}>
+                Logout
+              </button>
+            </>
+          ) : (
+            <span>Candidate: Not Authenticated</span>
+          )}
+        </div>
       </div>
       <div style={{ flex: 1 }}>
         <Editor

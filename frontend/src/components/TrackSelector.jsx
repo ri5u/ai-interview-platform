@@ -1,7 +1,7 @@
 export default function TrackSelector({ selectedTrack, onSelectTrack, disabled }) {
   const tracks = [
     { id: 'dsa', label: 'DSA Problem', enabled: true },
-    { id: 'lld', label: 'System Design (LLD) (Coming Soon)', enabled: false }
+    { id: 'lld', label: 'System Design', enabled: true }
   ];
 
   return (
