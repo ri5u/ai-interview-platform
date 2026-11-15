@@ -1,7 +1,9 @@
 class MicrophoneAudioProcessor extends AudioWorkletProcessor {
-    process(inputs, outpus, parameters) {
+    process(inputs) {
         const inputChannel = inputs[0]?.[0];
-        this.port.postMessage(inputChannel);
+        if(inputChannel && inputChannel.length > 0){
+            this.port.postMessage(inputChannel);
+        }
         return true;
     }
 

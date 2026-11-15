@@ -14,7 +14,6 @@ function arrayBufferToBase64(buffer) {
 }
 
 export default function App() {
-  const someDefaultValue = "// HELLOOO WORLD";
   const timerRef = useRef(null);
   const wsRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -93,14 +92,8 @@ export default function App() {
   }
 
   useEffect(() => {
-    if(!user) {
-      setIsSocketOpen(false);
-      return; 
-    }
-
     const socket = new WebSocket('ws://localhost:8080');
     wsRef.current = socket;
-
     socket.onopen = () => {
       setIsSocketOpen(true);
     };
@@ -108,11 +101,18 @@ export default function App() {
     socket.onclose = () => {
       setIsSocketOpen(false);
     };
+    if(!user) {
+      socket.close();
+      return; 
+    }
+
+
 
     socket.onmessage = (event) => {
       try {
         const packet = JSON.parse(event.data);
         if (packet.type === 'audio') {
+          //atob() decodes the data from base64 encoded format to binary string
           const binaryString = atob(packet.data);
           const bytes = new Uint8Array(binaryString.length);
           for (let i = 0; i < binaryString.length; i++) {
@@ -147,7 +147,8 @@ export default function App() {
       if (wsRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current?.send(JSON.stringify({
           type: "code",
-          data: value
+          data: value,
+          language: selectedLanguage
         }));
       }
     }, 2000);
@@ -155,12 +156,7 @@ export default function App() {
 
   async function handleStartInterview() {
     try {
-      if(wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current?.send(JSON.stringify({
-          type:'init', 
-          mode: selectedTrack
-        }));
-      }
+      // 1. Set up audio hardware & request mic permissions FIRST
       const ctx = new window.AudioContext({ sampleRate: 16000 });
       audioContextRef.current = ctx;
 
@@ -171,7 +167,7 @@ export default function App() {
       await ctx.audioWorklet.addModule("/audio-processor.js");
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, sampleRate: 16000 }
+        audio: { channelCount: 1, sampleRate: 16000, echoCancellation: true, noiseSuppression: true }
       });
       streamRef.current = stream;
 
@@ -187,17 +183,30 @@ export default function App() {
           pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
         }
 
-        if (wsRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current?.send(JSON.stringify({
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({
             type: "audio",
             data: arrayBufferToBase64(pcm16.buffer)
           }));
         }
       };
 
+      // 2. Only initialize the Gemini Live session ONCE mic permissions succeed
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({
+          type: "init",
+          mode: selectedTrack,
+          language: selectedLanguage
+        }));
+      }
+
       setIsInterviewActive(true);
     } catch (error) {
       console.error("Failed to start audio engine:", error);
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
     }
   }
 
@@ -230,10 +239,11 @@ export default function App() {
 
   async function handleLogout() {
     try{
-      await fetch("http://localhost:8080/api/auth/logout", {
+      const response = await fetch("http://localhost:8080/api/auth/logout", {
         method: "POST",
         credentials: "include"
       })
+      if (!response.ok) throw new Error("Logout failed");
       handleStopInteview();
       setUser(null); // Re-triggers {!user && <AuthDialog ... />}
     } catch (err) {

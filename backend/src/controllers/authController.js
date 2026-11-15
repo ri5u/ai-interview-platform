@@ -4,9 +4,12 @@ import { pool } from '../db.js';
 
 export async function signup(req, res) {
   const { username, password } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password required.' });
+  const validationError = validateCredentials(username, password, true);
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
   }
+  
+  const cleanUsername = username.trim();
 
   try {
     const salt = await bcrypt.genSalt(10);
@@ -14,7 +17,7 @@ export async function signup(req, res) {
 
     const result = await pool.query(
       'INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username',
-      [username, hash]
+      [cleanUsername, hash]
     );
 
     const user = result.rows[0];
@@ -40,12 +43,13 @@ export async function signup(req, res) {
 
 export async function login(req, res) {
   const { username, password } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password required.' });
+  const validationError = validateCredentials(username, password, false);
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
   }
-
+  const cleanUsername = username.trim();
   try {
-    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [cleanUsername]);
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
@@ -92,4 +96,29 @@ export async function getMe(req, res) {
 export async function logout(req, res) {
   const token = req.cookies?.token;
   res.status(200).clearCookie("token", {httpOnly: true, sameSite: "lax"}).json({message: "Logged Out"});
+}
+
+function validateCredentials(username, password, isSignup = false) {
+  if (typeof username !== 'string' || typeof password !== 'string') {
+    return 'Username and password must be strings.';
+  }
+
+  const cleanUsername = username.trim();
+  if (!cleanUsername || !password) {
+    return 'Username and password are required.';
+  }
+
+  if (isSignup) {
+    if (cleanUsername.length < 3 || cleanUsername.length > 20) {
+      return 'Username must be between 3 and 20 characters.';
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(cleanUsername)) {
+      return 'Username can only contain letters, numbers, and underscores.';
+    }
+    if (password.length < 6 || password.length > 72) {
+      return 'Password must be between 6 and 72 characters.';
+    }
+  }
+
+  return null;
 }

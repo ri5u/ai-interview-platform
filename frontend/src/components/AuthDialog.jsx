@@ -17,15 +17,31 @@ export default function AuthDialog({ onAuthSuccess }) {
     e.preventDefault();
     setStatusMessage('');
 
-    if (!username.trim() || !password.trim()) {
+    const cleanUsername = username.trim();
+    if (!username || !password.trim()) {
       setStatusMessage('Enter both username and password.');
       return;
     }
 
+    if (isSignUp) {
+      if (cleanUsername.length < 3 || cleanUsername.length > 20) {
+        setStatusMessage('Username must be between 3 and 20 characters.');
+        return;
+      }
+      if (!/^[a-zA-Z0-9_]+$/.test(cleanUsername)) {
+        setStatusMessage('Username can only contain letters, numbers, and underscores.');
+        return;
+      }
+      if (password.length < 6 || password.length > 72) {
+        setStatusMessage('Password must be between 6 and 72 characters.');
+        return;
+      }
+    }
+
     setLoading(true);
-    const endpoint = isSignUp ? '/api/auth/signup' : '/api/auth/login';
 
     try {
+      const endpoint = isSignUp ? '/api/auth/signup' : '/api/auth/login';
       const response = await fetch(`http://localhost:8080${endpoint}`, {
         method: 'POST',
         credentials: 'include',
@@ -50,7 +66,13 @@ export default function AuthDialog({ onAuthSuccess }) {
   }
 
   return (
-    <dialog ref={dialogRef}>
+    <dialog ref={dialogRef} 
+            onCancel={(e) => e.preventDefault()} 
+            onClose={() => {
+              if(dialogRef.current && !dialogRef.current.open){
+                dialogRef.current.showModal();
+              }
+            }}>
       <h3>{isSignUp ? 'Candidate Sign Up' : 'Candidate Log In'}</h3>
       <form onSubmit={handleSubmit}>
         <div>

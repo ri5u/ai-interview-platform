@@ -12,6 +12,7 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, disabled }
           type="button"
           disabled={disabled || !track.enabled}
           onClick={() => onSelectTrack(track.id)}
+          style={{ fontWeight: selectedTrack === track.id ? 'bold' : 'normal' }}
         >
           {track.label}
         </button>
