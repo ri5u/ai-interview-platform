@@ -28,6 +28,7 @@ export default function AuthDialog({ onAuthSuccess }) {
     try {
       const response = await fetch(`http://localhost:8080${endpoint}`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });

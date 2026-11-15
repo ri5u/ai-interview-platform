@@ -1,7 +1,11 @@
-import { createServer } from 'node:http';
 import express from 'express';
 import cors from 'cors';
-import WebSocket, { WebSocketServer } from "ws";
+import cookieParser from 'cookie-parser';
+import { parse } from 'cookie';
+import jwt from 'jsonwebtoken';
+
+import { createServer } from 'node:http';
+import { WebSocketServer } from "ws";
 import { GoogleGenAI, Modality } from "@google/genai";
 import "dotenv/config"
 
@@ -10,8 +14,12 @@ import authRoutes from './src/routes/authRoutes.js';
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+    origin: 'http://localhost:5173',
+    credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser());
 
 app.use('/api/auth', authRoutes);
 
@@ -37,7 +45,15 @@ Primary Interaction: Spoken conversational audio. Keep responses concise, vocal,
 };
 
 
-wss.on("connection", async(ws) => {
+wss.on("connection", async(ws, req) => {
+    try {
+        const {token} = parse(req.headers.cookie || '');
+        ws.user = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+        ws.close(1008, 'Unauthorized');
+        return;
+    }
+
     let session = null;
     let selectedPrompt = null;
     console.debug("Session Started");

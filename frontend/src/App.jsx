@@ -1,6 +1,5 @@
 import Editor from '@monaco-editor/react';
 import { useState, useRef, useEffect } from 'react';
-import { ws } from './socket';
 import TrackSelector from './components/TrackSelector';
 import LanguageSelector from './components/LanguageSelector';
 import AuthDialog from './components/AuthDialog';
@@ -17,16 +16,43 @@ function arrayBufferToBase64(buffer) {
 export default function App() {
   const someDefaultValue = "// HELLOOO WORLD";
   const timerRef = useRef(null);
-
+  const wsRef = useRef(null);
   const audioContextRef = useRef(null);
   const streamRef = useRef(null);
   const nextStartTimeRef = useRef(0);
   const scheduledSourcesRef = useRef([]);
 
+
   const [user, setUser] = useState(null);
   const [selectedTrack, setSelectedTrack] = useState("dsa");
   const [selectedLanguage, setSelectedLanguage] = useState("cpp");
   const [isInterviewActive, setIsInterviewActive] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isSocketOpen, setIsSocketOpen] = useState(false);
+
+  //hydrating the page on refresh
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch(`http://localhost:8080/api/auth/me`, {
+          method: 'GET',
+          credentials: 'include',
+        });
+
+        const userData = await response.json();
+        if (!response.ok) {
+          throw new Error('No existing session found');
+        }
+        setUser(userData.user);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    }
+    checkAuth();
+  }, [])
+
 
   function playAudio(arrayBuffer) {
     const ctx = audioContextRef.current;
@@ -67,7 +93,23 @@ export default function App() {
   }
 
   useEffect(() => {
-    ws.onmessage = (event) => {
+    if(!user) {
+      setIsSocketOpen(false);
+      return; 
+    }
+
+    const socket = new WebSocket('ws://localhost:8080');
+    wsRef.current = socket;
+
+    socket.onopen = () => {
+      setIsSocketOpen(true);
+    };
+
+    socket.onclose = () => {
+      setIsSocketOpen(false);
+    };
+
+    socket.onmessage = (event) => {
       try {
         const packet = JSON.parse(event.data);
         if (packet.type === 'audio') {
@@ -92,15 +134,18 @@ export default function App() {
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }
+      socket.close();
+      wsRef.current = null;
+      clearTimeout(timerRef.current);
     };
-  }, []);
+  }, [user]);
 
   function handleTyping(value) {
     if(!isInterviewActive) return;
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
+      if (wsRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current?.send(JSON.stringify({
           type: "code",
           data: value
         }));
@@ -110,8 +155,8 @@ export default function App() {
 
   async function handleStartInterview() {
     try {
-      if(ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
+      if(wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current?.send(JSON.stringify({
           type:'init', 
           mode: selectedTrack
         }));
@@ -142,8 +187,8 @@ export default function App() {
           pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
         }
 
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
+        if (wsRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current?.send(JSON.stringify({
             type: "audio",
             data: arrayBufferToBase64(pcm16.buffer)
           }));
@@ -164,11 +209,17 @@ export default function App() {
       streamRef.current = null;
     }
 
-    if(ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current?.send(JSON.stringify({
         type: 'stop'
       }))
     }
+
 
     //clear the timeout for the debounced text from the editor
     clearTimeout(timerRef.current);
@@ -177,20 +228,30 @@ export default function App() {
     setIsInterviewActive(false);
   }
 
-  function handleLogout() {
-    handleStopInteview();
-    setUser(null); // Re-triggers {!user && <AuthDialog ... />}
+  async function handleLogout() {
+    try{
+      await fetch("http://localhost:8080/api/auth/logout", {
+        method: "POST",
+        credentials: "include"
+      })
+      handleStopInteview();
+      setUser(null); // Re-triggers {!user && <AuthDialog ... />}
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       {/* user dialog show up till up until user has logged in */}
-      {!user && <AuthDialog onAuthSuccess={(userData) => setUser(userData)} />}
+      {!isCheckingAuth && !user && <AuthDialog onAuthSuccess={(userData) => setUser(userData)} />}
       <div style={{ padding: "8px 16px", background: "#222", color: "#fff", display: "flex", alignItems: "center", gap: "12px" }}>
         {!isInterviewActive ? (
+          isSocketOpen ? (
           <button onClick={handleStartInterview} style={{ padding: "6px 12px", cursor: "pointer" }}>
             Start Interview
           </button>
+          ) : user && <span style={{ color: "#aaa" }}>Connecting...</span>
         ) : (
           <>
             <button onClick={handleStopInteview} style={{ padding: "6px 12px", cursor: "pointer" }}>

@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import  jwt  from 'jsonwebtoken';
 import { pool } from '../db.js';
 
 export async function signup(req, res) {
@@ -16,7 +17,18 @@ export async function signup(req, res) {
       [username, hash]
     );
 
-    return res.status(201).json({ user: result.rows[0] });
+    const user = result.rows[0];
+    const token = jwt.sign(
+      {id: user.id, username: user.username},
+      process.env.JWT_SECRET,
+      {expiresIn: '1d'}
+    )
+
+    return res.cookie("token", token, {
+      httpOnly: true,
+      sameSite: 'lax', 
+      maxAge: 24 * 60 * 60 * 1000
+    }).status(201).json({ user: result.rows[0] });
   } catch (err) {
     if (err.code === '23505') {
       return res.status(409).json({ error: 'Username already exists.' });
@@ -44,9 +56,40 @@ export async function login(req, res) {
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
 
-    return res.status(200).json({ user: { id: user.id, username: user.username } });
+    const token = jwt.sign(
+      {id: user.id, username: user.username},
+      process.env.JWT_SECRET,
+      {expiresIn: '1d'}
+    )
+    return res.cookie("token", token, {
+      httpOnly: true, 
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000
+    }).status(200).json({ user: { id: user.id, username: user.username } });
+
   } catch (err) {
     console.error('Login Error:', err);
     return res.status(500).json({ error: 'Internal server error.' });
   }
+}
+
+export async function getMe(req, res) {
+  const token = req.cookies?.token; 
+  
+  if(!token) {
+    return res.status(401).json({error: 'Not Authenticated'});
+  }
+
+  try{
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    return res.status(200).json({user: {id: decoded.id, username: decoded.username}});
+  } catch (err) { 
+    console.error('Token Error: ', err);
+    res.status(401).json({error: 'Invalid or Expired token'});
+  }
+}
+
+export async function logout(req, res) {
+  const token = req.cookies?.token;
+  res.status(200).clearCookie("token", {httpOnly: true, sameSite: "lax"}).json({message: "Logged Out"});
 }
