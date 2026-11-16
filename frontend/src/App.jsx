@@ -4,6 +4,8 @@ import TrackSelector from './components/TrackSelector';
 import LanguageSelector from './components/LanguageSelector';
 import AuthDialog from './components/AuthDialog';
 
+import './App.css';
+
 function arrayBufferToBase64(buffer) {
   let binary = '';
   const bytes = new Uint8Array(buffer);
@@ -23,6 +25,7 @@ export default function App() {
 
 
   const [user, setUser] = useState(null);
+  const [setupStep, setSetupStep] = useState('track');
   const [selectedTrack, setSelectedTrack] = useState("dsa");
   const [selectedLanguage, setSelectedLanguage] = useState("cpp");
   const [isInterviewActive, setIsInterviewActive] = useState(false);
@@ -85,7 +88,7 @@ export default function App() {
 
   function stopAudioPlayback() {
     scheduledSourcesRef.current.forEach((src) => {
-      try { src.stop(); } catch (_) {}
+      try { src.stop(); } catch (_) { }
     });
     scheduledSourcesRef.current = [];
     nextStartTimeRef.current = 0;
@@ -101,9 +104,9 @@ export default function App() {
     socket.onclose = () => {
       setIsSocketOpen(false);
     };
-    if(!user) {
+    if (!user) {
       socket.close();
-      return; 
+      return;
     }
 
 
@@ -141,7 +144,7 @@ export default function App() {
   }, [user]);
 
   function handleTyping(value) {
-    if(!isInterviewActive) return;
+    if (!isInterviewActive) return;
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       if (wsRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
@@ -210,10 +213,10 @@ export default function App() {
     }
   }
 
-  function handleStopInteview(){
+  function handleStopInteview() {
     // Clean up any active audio stream if they log out mid-session
     stopAudioPlayback();
-    if(streamRef.current) {
+    if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
@@ -238,7 +241,7 @@ export default function App() {
   }
 
   async function handleLogout() {
-    try{
+    try {
       const response = await fetch("http://localhost:8080/api/auth/logout", {
         method: "POST",
         credentials: "include"
@@ -246,63 +249,96 @@ export default function App() {
       if (!response.ok) throw new Error("Logout failed");
       handleStopInteview();
       setUser(null); // Re-triggers {!user && <AuthDialog ... />}
+      setSetupStep('track');
     } catch (err) {
       console.error(err);
     }
   }
-
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
-      {/* user dialog show up till up until user has logged in */}
-      {!isCheckingAuth && !user && <AuthDialog onAuthSuccess={(userData) => setUser(userData)} />}
-      <div style={{ padding: "8px 16px", background: "#222", color: "#fff", display: "flex", alignItems: "center", gap: "12px" }}>
-        {!isInterviewActive ? (
-          isSocketOpen ? (
-          <button onClick={handleStartInterview} style={{ padding: "6px 12px", cursor: "pointer" }}>
-            Start Interview
-          </button>
-          ) : user && <span style={{ color: "#aaa" }}>Connecting...</span>
-        ) : (
-          <>
-            <button onClick={handleStopInteview} style={{ padding: "6px 12px", cursor: "pointer" }}>
-              Stop Interview
-            </button>
-            <span style={{ color: "#4ec9b0" }}>● Interview Live</span>
-          </>
-        )}
+    <div className="stage-shell">
+      {/* Step 1: Authentication Gate */}
+      {!isCheckingAuth && !user && (
+        <AuthDialog
+          onAuthSuccess={(userData) => {
+            setUser(userData);
+            setSetupStep('track');
+          }}
+        />
+      )}
 
+      {/* Step 2: Track Selection Modal */}
+      {!isCheckingAuth && user && setupStep === 'track' && (
         <TrackSelector
-          selectedTrack={selectedTrack}
-          onSelectTrack={setSelectedTrack}
-          disabled={isInterviewActive}
+          onSelectTrack={(track) => {
+            setSelectedTrack(track);
+            setSetupStep('language');
+          }}
         />
+      )}
 
-        <LanguageSelector 
-          currentLanguage={selectedLanguage}
-          onLanguageChange={setSelectedLanguage}
-          disabled={isInterviewActive}
+      {/* Step 3: Language Selection Modal */}
+      {!isCheckingAuth && user && setupStep === 'language' && (
+        <LanguageSelector
+          onLanguageChange={(lang) => {
+            setSelectedLanguage(lang);
+            setSetupStep('ready');
+          }}
         />
-        <div>
-          {user ? (
-            <>
-              <span>Candidate: {user.username} </span>
-              <button type="button" onClick={handleLogout}>
-                Logout
-              </button>
-            </>
-          ) : (
-            <span>Candidate: Not Authenticated</span>
-          )}
-        </div>
-      </div>
-      <div style={{ flex: 1 }}>
+      )}
+
+      {/* Step 4: Centered "Zoom-Style" Editor Stage */}
+      <main className="editor-stage">
         <Editor
           height="100%"
           theme="vs-dark"
-          language={selectedLanguage} 
+          language={selectedLanguage}
           onChange={handleTyping}
         />
-      </div>
+      </main>
+
+      {/* Bottom Control Dock */}
+      <footer className="bottom-dock">
+        <div className="dock-left">
+          <span className="meta-chip">{selectedTrack.toUpperCase()}</span>
+          <span className="meta-chip">{selectedLanguage}</span>
+        </div>
+
+        <div className="dock-center">
+          {!isInterviewActive ? (
+            isSocketOpen ? (
+              <>
+                <button onClick={handleStartInterview} className="btn btn-primary">
+                  Start Interview
+                </button>
+                <span className="status-text">Ready when you are</span>
+              </>
+            ) : (
+              user && <span className="status-text">Connecting to interview server...</span>
+            )
+          ) : (
+            <>
+              <button onClick={handleStopInteview} className="btn btn-danger">
+                Stop Interview
+              </button>
+              <span className="live-badge">
+                <span className="live-dot" />
+                Interview Live • Listening
+              </span>
+            </>
+          )}
+        </div>
+
+        <div className="dock-right">
+          {user && (
+            <>
+              <span className="status-text">{user.username}</span>
+              <button type="button" onClick={handleLogout} className="btn btn-ghost">
+                Logout
+              </button>
+            </>
+          )}
+        </div>
+      </footer>
     </div>
   );
 }
