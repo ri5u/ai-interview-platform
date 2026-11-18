@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export default function AuthDialog({ onAuthSuccess }) {
   const dialogRef = useRef(null);
@@ -42,7 +43,7 @@ export default function AuthDialog({ onAuthSuccess }) {
 
     try {
       const endpoint = isSignUp ? '/api/auth/signup' : '/api/auth/login';
-      const response = await fetch(`http://localhost:8080${endpoint}`, {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

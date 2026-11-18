@@ -6,6 +6,10 @@ import AuthDialog from './components/AuthDialog';
 
 import './App.css';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL = import.meta.env.VITE_WS_URL || `${wsProtocol}//${window.location.host}/ws`;
+
 function arrayBufferToBase64(buffer) {
   let binary = '';
   const bytes = new Uint8Array(buffer);
@@ -36,7 +40,7 @@ export default function App() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const response = await fetch(`http://localhost:8080/api/auth/me`, {
+        const response = await fetch(`${API_BASE}/api/auth/me`, {
           method: 'GET',
           credentials: 'include',
         });
@@ -95,7 +99,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    const socket = new WebSocket('ws://localhost:8080');
+    const socket = new WebSocket(WS_URL);
     wsRef.current = socket;
     socket.onopen = () => {
       setIsSocketOpen(true);
@@ -242,7 +246,7 @@ export default function App() {
 
   async function handleLogout() {
     try {
-      const response = await fetch("http://localhost:8080/api/auth/logout", {
+      const response = await fetch(`${API_BASE}/api/auth/logout`, {
         method: "POST",
         credentials: "include"
       })
