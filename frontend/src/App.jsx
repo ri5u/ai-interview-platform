@@ -314,7 +314,7 @@ export default function App() {
                 <button onClick={handleStartInterview} className="btn btn-primary">
                   Start Interview
                 </button>
-                <span className="status-text">Ready when you are</span>
+                <span className="status-text">Ready when you are ...</span>
               </>
             ) : (
               user && <span className="status-text">Connecting to interview server...</span>
